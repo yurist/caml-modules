@@ -21,10 +21,17 @@
                                symops [sym ops]]
                            [(conj exps symops) (conj locs symops)])
 
+                         :letfn
+                         (let [[sym args & body] opers
+                               symops [sym `(fn ~args ~@body)]]
+                           [(conj exps symops) (conj locs symops)])
+
                          (:open :include)
-                         (let [[e & syms] opers
-                               syms (or syms
-                                        (keys (:exports (eval e))))
+                         (let [[e syms] opers
+                               syms (cond
+                                      (vector? syms) syms
+                                      syms (eval syms)
+                                      :else (keys (:exports (eval e))))
                                exp (gensym "exp")
                                locs (conj locs [exp `(:exports ~e)])
                                symops (map (fn [sym] [sym `(~exp '~sym)]) syms)
@@ -91,16 +98,22 @@
         thaw' (partial thaw struct)]
     (cond
       (= (type e) FrozenFun)
-      (let [{[fsym args] :icicle} e]
-        (apply (locs fsym) (map thaw' args)))
+      (let [{[fsym args] :icicle} e
+            floc (locs fsym)]
+        (when-not floc
+          (throw (Exception. (str fsym " unbound"))))
+        (apply floc (map thaw' args)))
 
       (= (type e) FrozenSym)
-      (let [{sym :icicle} e]
-        (locs sym))
+      (let [{sym :icicle} e
+            sloc (locs sym)]
+        (when-not sloc
+          (throw (Exception. (sym " unbound"))))
+        sloc)
 
       (fn? e)
       (fn [x] (thaw' (e x)))
 
       :else e)))
 
-(def run-in thaw)
+(def eval-in thaw)
