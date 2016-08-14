@@ -349,3 +349,166 @@
   (is (= "(X || (Y || tt) && (~Y || ~tt)) && (~X || ~Y && ~tt || ~(~Y) && ~(~tt))" (eval-in (PNDownW (PNDownW (PNDownW SW))) (observe exadd-xy1))))
   (is (= "(X || ~Y) && (~X || ~(~Y))" (eval-in (TCPW (PNDownW (PNDownW (PNDownW SW)))) (observe exadd-xy1))))
   (is (= "(X || ~Y) && (~X || Y)" (eval-in (TCPW (PNDownW (PNDownW (PNDownW (PN2NW SW))))) (observe exadd-xy1)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; end of bneg_down.ml ;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; hgates.ml ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(def SYMHO (concat SYM
+                   (sig
+                    lam
+                    app)))
+
+(reify-funs lam app)
+
+(defn applies [f & args]
+  (loop [f f args args]
+    (if (seq args)
+      (recur (f (first args)) (rest args))
+      f)))
+
+(defn >> [& args]
+  (apply applies args))
+
+(defn apps [f & args]
+  (loop [f f args args]
+    (if (seq args)
+      (recur (app  f (first args)) (rest args))
+      f)))
+
+(defn >a> [& args]
+  (apply apps args))
+
+(def ehadd3
+  (lam (fn [x]
+         (lam (fn [y]
+                (lam (fn [z]
+                       (xor (xor x y) z))))))))
+
+(def ehadd3t
+  (lam (fn [x]
+         (lam (fn [y]
+                (>a> ehadd3 x y (lit true)))))))
+
+(def RHO (struct
+          (:include R)
+          (:let lam identity)
+          (:letfn app [f x] (f x))))
+
+(defn evalho [x]
+  (eval-in RHO (observe x)))
+
+(deftest evalho-test
+  (is (true? (evalho ex1)))
+  (is (false? (>> (evalho ehadd3) true false true)))
+  (is (false? (>> (evalho ehadd3t) true false))))
+
+(defn cc
+  "Count occurences of c in s"
+  [c s]
+  (reduce #(if (= c %2) (inc %1) %1) 0 s))
+
+(def SHO (struct
+          (:include S)
+          (:letfn app [f x] (fn [p] ((paren (> p 10)) (str (f 10) " " (x 11)))))
+          (:let varnames "xyzuvw")
+          (:letfn varname [i]
+                  (if (< i (count varnames))
+                    (nth varnames i)
+                    (str "x" i)))
+          (:letfn lam [f]
+                  (let [body0 (observe (f (constantly "XXX")))
+                        var (varname (cc \λ body0))]
+                    (fn [p] ((paren (pos? p)) (str "λ" var "." (observe (f (constantly var))))))))))
+
+(defn viewho [x]
+  (eval-in SHO (observe x)))
+
+(deftest viewho-test
+  (is (= "λz.λy.λx.((z || y) && ~(z && y) || x) && ~((z || y) && ~(z && y) && x)" (viewho ehadd3)))
+  (is (= "λv.λu.(λz.λy.λx.((z || y) && ~(z && y) || x) && ~((z || y) && ~(z && y) && x)) v u tt" (viewho ehadd3t))))
+
+(defn TCPHO [I]
+  (let [I (>< I SYMHO)]
+    (struct
+     (:include (TCP I) [dyn lit neg an_ or_ observe])
+     (:letfn app [f x]
+             (match f
+                    {:unk f} {:unk (($ I app) f (dyn x))}))
+     (:letfn lam [f] {:unk (($ I lam) (fn [x] (dyn (f {:unk x}))))}))))
+
+(defn obscpho [I e]
+  (eval-in (TCPHO I) (observe e)))
+
+(def mex1 (lam (fn [x] (an_ x (lit false)))))
+
+(deftest tcpho-test
+  (is (= "λx.ff" (obscpho SHO mex1))))
+
+(defn SYMTHO [X F]
+  (let [X (>< X Trans)
+        F (>< F SYMHO)]
+    (struct
+     (:open X Trans)
+     (:include (SYMT X F) SYM)
+     (:let app (partial map2 ($ F app)))
+     (:letfn lam [f] (fwd (($ F lam) (fn [x] (bwd (f (fwd x))))))))))
+
+(defn PN2NHO [F]
+  (let [F (>< F SYMHO)]
+    (struct
+     (:let OptM (DN2N F))
+     (:include (SYMTHO OptM F) SYMHO)
+     (:include ($ OptM IDelta) [neg]))))
+
+(obsn2n SW (neg (neg (lit true))))
+(eval-in (PN2NHO SHO) (observe (neg (neg (lit true)))))
+(eval-in (PN2NHO SHO) (observe (lam (fn [x] (neg (neg x))))))
+(eval-in (PN2NHO SHO) (observe (lam (fn [x] (an_ (lit true) (neg (neg x)))))))
+(eval-in (PN2NHO (TCPHO SHO)) (observe (lam (fn [x] (an_ (lit true) (neg (neg x)))))))
+
+(defn PNDownHO [F]
+  (let [F (>< F SYMHO)]
+    (struct
+     (:let OptM (DNDown F))
+     (:include (SYMTHO OptM F) SYMHO)
+     (:include ($ OptM IDelta) [neg an_ or_]))))
+
+(eval-in (PNDownHO SHO) (observe (app (lam (fn [x] (lam (fn [y] (neg (an_ x y)))))) (lit true))))
+
+(defn DStaticApp [F]
+  (let [F (>< F SYMHO)]
+    (struct
+     (:let X (struct
+              (:letfn fwd [x] {:unk x})
+              (:let bwd (fn bwd [e] (match e
+                                          {:unk x} x
+                                          {:fun f} (($ F lam) (fn [x] (bwd (f (fwd x))))))))))
+     (:include X [fwd bwd])
+     (:include (TransDef X) [map1 map2])
+     (:let IDelta (struct
+                   (:letfn lam [f] {:fun f})
+                   (:letfn app [f x]
+                           (match f
+                                  {:fun ff} (ff x)
+                                  _ {:unk (($ F app) (bwd f) (bwd x))})))))))
+
+(defn PStaticApp [F]
+  (let [F (>< F SYMHO)]
+    (struct
+     (:let OptM (DStaticApp F))
+     (:include (SYMTHO OptM F) SYMHO)
+     (:include ($ OptM IDelta) [lam app]))))
+
+(viewho ehadd3t);; => "λv.λu.(λz.λy.λx.((z || y) && ~(z && y) || x) && ~((z || y) && ~(z && y) && x)) v u tt"
+
+(eval-in (PStaticApp SHO) (observe ehadd3t));; => "λy.λx.((y || x) && ~(y && x) || tt) && ~((y || x) && ~(y && x) && tt)"
+
+(eval-in (PStaticApp (PNDownHO SHO)) (observe ehadd3t));; => "λy.λx.((y || x) && (~y || ~x) || tt) && (~((y || x) && (~y || ~x)) || ~tt)"
+
+
+(eval-in (PStaticApp (TCPHO (PNDownHO SHO))) (observe ehadd3t));; => "λy.λx.~(y || x) || ~(~y || ~x)"
+(eval-in (PStaticApp (TCPHO (PNDownHO (PNDownHO SHO)))) (observe ehadd3t))
+;; => "λy.λx.~y && ~x || ~(~y) && ~(~x)"
+(eval-in (PStaticApp (TCPHO (PNDownHO (PNDownHO (PN2NHO SHO))))) (observe ehadd3t))
+;; => "λy.λx.~y && ~x || y && x"
