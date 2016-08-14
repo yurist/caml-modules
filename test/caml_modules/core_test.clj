@@ -137,3 +137,4 @@
 
 (deftest neg-down-test
   (is (= (evl ex2n) (push-neg RW ex2n))))
+

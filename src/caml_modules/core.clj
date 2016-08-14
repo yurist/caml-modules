@@ -106,9 +106,9 @@
 
       (= (type e) FrozenSym)
       (let [{sym :icicle} e
-            sloc (locs sym)]
-        (when-not sloc
-          (throw (Exception. (sym " unbound"))))
+            sloc (locs sym ::not-found)]
+        (when (= sloc ::not-found)
+          (throw (Exception. (str sym " unbound"))))
         sloc)
 
       (fn? e)
