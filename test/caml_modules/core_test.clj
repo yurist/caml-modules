@@ -1,4 +1,5 @@
 (ns caml-modules.core-test
+  (:refer-clojure :exclude [struct])
   (:require [clojure.test :refer :all]
             [caml-modules.core :refer :all]
             [clojure.core.match :refer [match]]))
@@ -300,3 +301,51 @@
 (deftest fr-test
   (is (= (view (obsn2n FRW exnn)) (obsn2n SW exnn)))
   (is (= (view (obsn2n FRW exadd-xy1)) (obsn2n SW exadd-xy1))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; bneg_down.ml ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn flip-conn [x]
+  (case x
+    :cand :cor
+    :cor :cand))
+
+(defn DNDown [F]
+  (let [F (>< F SYM)]
+    (struct
+     (:let X (struct
+              (:letfn fwd [x] {:unk x})
+              (:letfn bwd [x] (match x
+                                     {:unk e} e
+                                     {:con [:cand e1 e2]} (($ F an_) e1 e2)
+                                     {:con [:cor e1 e2]} (($ F or_) e1 e2)))))
+     (:include X [fwd bwd])
+     (:include (TransDef X) [map1 map2])
+     (:let IDelta (struct
+                   (:letfn neg [x]
+                           (match x
+                                  {:unk e}
+                                  {:unk (($ F neg) e)}
+                                  
+                                  {:con [c e1 e2]}
+                                  {:con [(flip-conn c) (($ F neg) e1) (($ F neg) e2) ]}))
+                   (:letfn an_ [e1 e2] {:con [:cand (bwd e1) (bwd e2)]})
+                   (:letfn or_ [e1 e2] {:con [:cor (bwd e1) (bwd e2)]}))))))
+
+(defn PNDownW [F]
+  (let [F (>< F SYMW)]
+    (struct
+     (:let OptM (DNDown F))
+     (:include (SYMTW OptM F) SYMW)
+     (:include ($ OptM IDelta) [neg an_ or_]))))
+
+(defn obsndown [F x] (eval-in (PNDownW F) (observe x)))
+
+(deftest ndown-test
+  (is (= "~(~(~(~X) && Y))" (view exnn)))
+  (is (= "~(~(~(~X))) && ~(~Y)" (obsndown SW exnn)))
+  (is (= "~(~(~(~X))) && ~(~Y)" (eval-in (PNDownW (PNDownW SW)) (observe exnn))))
+  (is (= "(X || (Y || tt) && (~Y || ~tt)) && (~X || ~((Y || tt) && (~Y || ~tt)))" (obsndown SW exadd-xy1)))
+  (is (= "(X || (Y || tt) && (~Y || ~tt)) && (~X || ~(Y || tt) || ~(~Y || ~tt))" (eval-in (PNDownW (PNDownW SW)) (observe exadd-xy1))))
+  (is (= "(X || (Y || tt) && (~Y || ~tt)) && (~X || ~Y && ~tt || ~(~Y) && ~(~tt))" (eval-in (PNDownW (PNDownW (PNDownW SW))) (observe exadd-xy1))))
+  (is (= "(X || ~Y) && (~X || ~(~Y))" (eval-in (TCPW (PNDownW (PNDownW (PNDownW SW)))) (observe exadd-xy1))))
+  (is (= "(X || ~Y) && (~X || Y)" (eval-in (TCPW (PNDownW (PNDownW (PNDownW (PN2NW SW))))) (observe exadd-xy1)))))
