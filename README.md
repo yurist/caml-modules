@@ -1,6 +1,6 @@
-# caml-modules
+# caml-functors
 
-OCaml module/functor polymorphism
+OCaml functor-style polymorphism for Clojure
 
 ## Usage
 

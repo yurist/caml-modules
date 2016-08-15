@@ -1,7 +1,7 @@
-(ns caml-modules.core-test
+(ns caml-functors.core-test
   (:refer-clojure :exclude [struct])
   (:require [clojure.test :refer :all]
-            [caml-modules.core :refer :all]
+            [caml-functors.core :refer :all]
             [clojure.core.match :refer [match]]))
 
 ;;;;;;;;;;;;;;;;;;;; basic_gates.ml ;;;;;;;;;;;;;;;;;;;;;

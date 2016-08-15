@@ -1,4 +1,4 @@
-(ns caml-modules.core)
+(ns caml-functors.core)
 
 (defmacro struct
   "Creates a struct from a list of directives.
