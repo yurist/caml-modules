@@ -434,16 +434,18 @@
      (:include (TCP I) [dyn lit neg an_ or_ observe])
      (:letfn app [f x]
              (match f
-                    {:unk f} {:unk (($ I app) f (dyn x))}))
+                    {:unk ff} {:unk (($ I app) ff (dyn x))}))
      (:letfn lam [f] {:unk (($ I lam) (fn [x] (dyn (f {:unk x}))))}))))
 
 (defn obscpho [I e]
   (eval-in (TCPHO I) (observe e)))
 
 (def mex1 (lam (fn [x] (an_ x (lit false)))))
+(def mex2 (app (lam (fn [x] (or_ x (lit true)))) (lit true)))
 
 (deftest tcpho-test
-  (is (= "λx.ff" (obscpho SHO mex1))))
+  (is (= "λx.ff" (obscpho SHO mex1)))
+  (is (= "(λx.tt) tt" (obscpho SHO mex2))))
 
 (defn SYMTHO [X F]
   (let [X (>< X Trans)
@@ -461,11 +463,11 @@
      (:include (SYMTHO OptM F) SYMHO)
      (:include ($ OptM IDelta) [neg]))))
 
-(obsn2n SW (neg (neg (lit true))))
-(eval-in (PN2NHO SHO) (observe (neg (neg (lit true)))))
-(eval-in (PN2NHO SHO) (observe (lam (fn [x] (neg (neg x))))))
-(eval-in (PN2NHO SHO) (observe (lam (fn [x] (an_ (lit true) (neg (neg x)))))))
-(eval-in (PN2NHO (TCPHO SHO)) (observe (lam (fn [x] (an_ (lit true) (neg (neg x)))))))
+(deftest n2nho-test
+  (is (= (obsn2n SW (neg (neg (lit true)))) (eval-in (PN2NHO SHO) (observe (neg (neg (lit true)))))))
+  (is (= "λx.x" (eval-in (PN2NHO SHO) (observe (lam (fn [x] (neg (neg x))))))))
+  (is (= "λx.tt && x" (eval-in (PN2NHO SHO) (observe (lam (fn [x] (an_ (lit true) (neg (neg x)))))))))
+  (is (= "λx.x" (eval-in (PN2NHO (TCPHO SHO)) (observe (lam (fn [x] (an_ (lit true) (neg (neg x))))))))))
 
 (defn PNDownHO [F]
   (let [F (>< F SYMHO)]
@@ -474,7 +476,8 @@
      (:include (SYMTHO OptM F) SYMHO)
      (:include ($ OptM IDelta) [neg an_ or_]))))
 
-(eval-in (PNDownHO SHO) (observe (app (lam (fn [x] (lam (fn [y] (neg (an_ x y)))))) (lit true))))
+(deftest ndownho-test
+  (is (= "(λy.λx.~y || ~x) tt" (eval-in (PNDownHO SHO) (observe (app (lam (fn [x] (lam (fn [y] (neg (an_ x y)))))) (lit true)))))))
 
 (defn DStaticApp [F]
   (let [F (>< F SYMHO)]
@@ -500,15 +503,33 @@
      (:include (SYMTHO OptM F) SYMHO)
      (:include ($ OptM IDelta) [lam app]))))
 
-(viewho ehadd3t);; => "λv.λu.(λz.λy.λx.((z || y) && ~(z && y) || x) && ~((z || y) && ~(z && y) && x)) v u tt"
+(def chainho (comp TCPHO PNDownHO PN2NHO))
 
-(eval-in (PStaticApp SHO) (observe ehadd3t));; => "λy.λx.((y || x) && ~(y && x) || tt) && ~((y || x) && ~(y && x) && tt)"
+(defn ntimes [n f]
+  (if (zero? n)
+    identity
+    (comp (ntimes (dec n) f) f)))
 
-(eval-in (PStaticApp (PNDownHO SHO)) (observe ehadd3t));; => "λy.λx.((y || x) && (~y || ~x) || tt) && (~((y || x) && (~y || ~x)) || ~tt)"
+(viewho ehadd3)
+;; => "λz.λy.λx.((z || y) && ~(z && y) || x) && ~((z || y) && ~(z && y) && x)"
+(viewho ehadd3t)
+;; => "λv.λu.(λz.λy.λx.((z || y) && ~(z && y) || x) && ~((z || y) && ~(z && y) && x)) v u tt"
 
+(deftest chain-test
+  (is (= "λz.λy.λx.((z || y) && (~z || ~y) || x) && (~z && ~y || z && y || ~x)"
+         (eval-in ((ntimes 5 chainho) SHO) (observe ehadd3))))
+  (is (false? (>> (eval-in ((ntimes 5 chainho) RHO) (observe ehadd3)) true false true)))
+  (is (= "λv.λu.(λz.λy.λx.((z || y) && (~z || ~y) || x) && (~z && ~y || z && y || ~x)) v u tt"
+         (eval-in ((ntimes 5 chainho) SHO) (observe ehadd3t)))))
 
-(eval-in (PStaticApp (TCPHO (PNDownHO SHO))) (observe ehadd3t));; => "λy.λx.~(y || x) || ~(~y || ~x)"
-(eval-in (PStaticApp (TCPHO (PNDownHO (PNDownHO SHO)))) (observe ehadd3t))
-;; => "λy.λx.~y && ~x || ~(~y) && ~(~x)"
-(eval-in (PStaticApp (TCPHO (PNDownHO (PNDownHO (PN2NHO SHO))))) (observe ehadd3t))
-;; => "λy.λx.~y && ~x || y && x"
+(deftest staticapp-test
+  (is (= "tt" (eval-in (PStaticApp SHO) (observe (app (lam (fn [x] x)) (lit true)))))))
+
+(deftest chain-and-static-test
+  (is (= "λy.λx.~y && ~x || y && x" (eval-in ((comp PStaticApp (ntimes 5 chainho)) SHO) (observe ehadd3t))))
+  (is (= "λy.λx.((y || x) && (~y || ~x) || tt) && (~y && ~x || y && x || ~tt)"
+         (eval-in ((comp (ntimes 5 chainho) PStaticApp) SHO) (observe ehadd3t))))
+  (is (= "λy.λx.~y && ~x || y && x"
+         (eval-in ((comp (ntimes 5 chainho) PStaticApp (ntimes 5 chainho)) SHO) (observe ehadd3t)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; end of hgates.ml ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
