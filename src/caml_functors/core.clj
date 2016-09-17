@@ -61,13 +61,12 @@
     `(sig* ~@qsyms)))
 
 (defn >< [struct sig]
-  (let [s-keyset (into #{} (keys (:exports struct)))
+  (let [s-keyset (set (keys (:exports struct)))
         missing (remove s-keyset sig)]
     (if (seq missing)
       (throw (Exception. (str "Missing exports " (vec missing))))
       {:locals (:locals struct)
-       :exports (into {}
-                      (for [k sig] [k ((:exports struct) k)]))})))
+       :exports (select-keys (:exports struct) sig)})))
 
 (defn $* [struct sym]
   ((:exports struct) sym))
