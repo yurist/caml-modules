@@ -5,7 +5,8 @@
   Possible directives:
   :include expr symbols?
   :open expr symbols?
-  :let symbol value"
+  :let symbol value
+  :letfn symbol args body"
   [& dirs]
   (let [go (fn [exps locs dirs]
              (let [[dir & dirs] dirs]
