@@ -64,7 +64,7 @@
   (let [s-keyset (set (keys (:exports struct)))
         missing (remove s-keyset sig)]
     (if (seq missing)
-      (throw (Exception. (str "Missing exports " (vec missing))))
+      (throw (IllegalArgumentException. (str "Missing exports " (vec missing))))
       {:locals (:locals struct)
        :exports (select-keys (:exports struct) sig)})))
 
