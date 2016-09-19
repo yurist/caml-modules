@@ -112,7 +112,7 @@
         sloc)
 
       (fn? e)
-      (fn [x] (thaw' (e x)))
+      (fn [& xs] (thaw' (apply e xs)))
 
       :else e)))
 
