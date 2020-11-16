@@ -8,12 +8,16 @@ Clojure as any Lisp of course lacks these mechanisms, so I wondered if it was po
 
 See the core_test.clj for usage. The syntax is as close to functors as possible, the scope and resolution are pretty close. What you see is in fact almost 1:1 rendition of OCaml samples from this page: http://okmij.org/ftp/tagless-final/course2/index.html
 
+## Why would it be interesting?
 
+Besides me proving my Clojure macro-fu, this little project may have a couple of things of value:
 
-## Usage
+- Demonstrating how variable scope can be manipulated using macros. That was a pretty interesting excercize, and it proved once more how powerful Lisp is. The `eval-in` function and the macros it uses provide late binding environment and the scope modeled after OCaml. It shows that not only can one define their custom syntax in Lisp using macros, but also do custom variable scoping - essentially creating a *very* different language.
+- I like Clojure more than OCaml, and would much prefer using it for complex data structure manipulation. But in certain areas of computer science, specifically static code analysis, lots of sample implementations are in OCaml. Having the functors implemented in Clojure makes rewriting OCaml code in Clojure fairly straightforward.
 
-FIXME
 
 ## License
+
+EPL-1.0
 
 Copyright © 2016 Yuri Steinschreiber
